@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StockFlow — Gestion des Stocks & Approvisionnements</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #1f2d6e;
+    --navy-dark: #131c4a;
+    --navy-light: #2a3d8f;
+    --orange: #e44c00;
+    --orange-light: #ff6a20;
+    --surface: #f5f6fa;
+    --surface2: #eef0f8;
+    --white: #ffffff;
+    --text: #0d1333;
+    --text-muted: #6b7280;
+    --border: rgba(31,45,110,0.12);
+    --border-strong: rgba(31,45,110,0.25);
+    --shadow-sm: 0 1px 3px rgba(31,45,110,0.08);
+    --shadow-md: 0 4px 16px rgba(31,45,110,0.10);
+    --shadow-lg: 0 12px 40px rgba(31,45,110,0.14);
+    --radius: 10px;
+    --radius-lg: 16px;
+    --radius-xl: 24px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Space Grotesk', sans-serif; background: var(--surface); color: var(--text); min-height: 100vh; font-size: 14px; line-height: 1.6; }
+  .sidebar { position: fixed; left: 0; top: 0; bottom: 0; width: 240px; background: var(--navy-dark); display: flex; flex-direction: column; z-index: 100; border-right: 1px solid rgba(255,255,255,0.06); }
+  .sidebar-logo { padding: 24px 20px 20px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+  .logo-text { font-size: 20px; font-weight: 700; color: white; letter-spacing: -0.5px; }
+  .logo-text span { color: var(--orange); }
+  .logo-sub { font-size: 10px; color: rgba(255,255,255,0.4); letter-spacing: 2px; text-transform: uppercase; margin-top: 2px; font-family: 'DM Mono', monospace; }
+  .nav { padding: 16px 12px; flex: 1; }
+  .nav-section-label { font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: 1.5px; padding: 4px 8px 8px; font-family: 'DM Mono', monospace; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: var(--radius); cursor: pointer; margin-bottom: 2px; color: rgba(255,255,255,0.55); font-weight: 500; font-size: 13.5px; transition: all 0.18s ease; border: none; background: none; width: 100%; text-align: left; }
+  .nav-item:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.85); }
+  .nav-item.active { background: rgba(228,76,0,0.2); color: white; border-left: 3px solid var(--orange); padding-left: 9px; }
+  .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; opacity: 0.75; }
+  .nav-item.active svg { opacity: 1; }
+  .sidebar-footer { padding: 16px 20px; border-top: 1px solid rgba(255,255,255,0.08); font-size: 11px; color: rgba(255,255,255,0.3); font-family: 'DM Mono', monospace; }
+  .main { margin-left: 240px; min-height: 100vh; }
+  .topbar { background: white; border-bottom: 1px solid var(--border); padding: 0 32px; height: 60px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 50; box-shadow: var(--shadow-sm); }
+  .topbar-title { font-size: 16px; font-weight: 600; color: var(--navy); }
+  .topbar-actions { display: flex; align-items: center; gap: 12px; }
+  .badge-live { background: #dcfce7; color: #166534; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 20px; font-family: 'DM Mono', monospace; }
+  .content { padding: 28px 32px; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
+  .kpi-card { background: white; border-radius: var(--radius-lg); padding: 20px 22px; border: 1px solid var(--border); box-shadow: var(--shadow-sm); position: relative; overflow: hidden; }
+  .kpi-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--navy); }
+  .kpi-card.orange::before { background: var(--orange); }
+  .kpi-card.green::before { background: #10b981; }
+  .kpi-card.amber::before { background: #f59e0b; }
+  .kpi-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .kpi-value { font-size: 28px; font-weight: 700; color: var(--navy); letter-spacing: -1px; line-height: 1; }
+  .kpi-sub { font-size: 12px; color: var(--text-muted); margin-top: 6px; display: flex; align-items: center; gap: 4px; }
+  .kpi-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+  .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .section-title { font-size: 15px; font-weight: 600; color: var(--navy); display: flex; align-items: center; gap: 8px; }
+  .section-title::before { content: ''; width: 3px; height: 16px; background: var(--orange); border-radius: 2px; }
+  .btn { display: inline-flex; align-items: center; gap: 7px; padding: 8px 16px; border-radius: var(--radius); font-size: 13px; font-weight: 600; cursor: pointer; border: none; transition: all 0.18s ease; font-family: 'Space Grotesk', sans-serif; }
+  .btn-primary { background: var(--navy); color: white; }
+  .btn-primary:hover { background: var(--navy-light); }
+  .btn-orange { background: var(--orange); color: white; }
+  .btn-orange:hover { background: var(--orange-light); }
+  .btn-ghost { background: white; color: var(--navy); border: 1px solid var(--border-strong); }
+  .btn-ghost:hover { background: var(--surface2); }
+  .btn-sm { padding: 5px 11px; font-size: 12px; }
+  .btn svg { width: 15px; height: 15px; }
+  .toolbar { background: white; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 18px; margin-bottom: 18px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; box-shadow: var(--shadow-sm); }
+  .search-wrap { position: relative; flex: 1; min-width: 200px; }
+  .search-wrap svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--text-muted); }
+  .search-input { width: 100%; padding: 8px 12px 8px 35px; border: 1px solid var(--border-strong); border-radius: var(--radius); font-size: 13px; font-family: 'Space Grotesk', sans-serif; background: var(--surface); color: var(--text); outline: none; transition: border-color 0.18s; }
+  .search-input:focus { border-color: var(--navy); background: white; }
+  select.filter-sel { padding: 8px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius); font-size: 13px; font-family: 'Space Grotesk', sans-serif; background: var(--surface); color: var(--text); cursor: pointer; outline: none; }
+  .table-wrap { background: white; border-radius: var(--radius-lg); border: 1px solid var(--border); box-shadow: var(--shadow-sm); overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { background: var(--navy-dark); color: rgba(255,255,255,0.7); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; padding: 12px 16px; text-align: left; border-bottom: 2px solid rgba(255,255,255,0.08); font-family: 'DM Mono', monospace; white-space: nowrap; }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background 0.12s; cursor: pointer; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface); }
+  tbody td { padding: 13px 16px; font-size: 13px; vertical-align: middle; }
+  .product-name { font-weight: 600; color: var(--navy); font-size: 13.5px; }
+  .product-ref { font-size: 11px; color: var(--text-muted); font-family: 'DM Mono', monospace; margin-top: 1px; }
+  .status-badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; font-family: 'DM Mono', monospace; white-space: nowrap; }
+  .status-badge::before { content: ''; width: 5px; height: 5px; border-radius: 50%; }
+  .s-standby { background: #f1f5f9; color: #64748b; }
+  .s-standby::before { background: #94a3b8; }
+  .s-production { background: #fef9c3; color: #854d0e; }
+  .s-production::before { background: #ca8a04; animation: pulse 1.5s infinite; }
+  .s-mer { background: #dbeafe; color: #1e40af; }
+  .s-mer::before { background: #3b82f6; }
+  .s-port { background: #dcfce7; color: #166534; }
+  .s-port::before { background: #22c55e; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .stock-bar-wrap { min-width: 90px; }
+  .stock-num { font-size: 13px; font-weight: 700; color: var(--navy); margin-bottom: 4px; display: flex; justify-content: space-between; }
+  .stock-bar { height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .stock-fill { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
+  .fill-ok { background: linear-gradient(90deg, #10b981, #34d399); }
+  .fill-low { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+  .fill-crit { background: linear-gradient(90deg, var(--orange), #ff6a20); }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(13,19,51,0.55); z-index: 200; display: none; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(4px); }
+  .modal-overlay.open { display: flex; }
+  .modal { background: white; border-radius: var(--radius-xl); width: 100%; max-width: 640px; max-height: 90vh; overflow-y: auto; box-shadow: var(--shadow-lg); animation: slideUp 0.25s ease; }
+  @keyframes slideUp { from{transform:translateY(20px);opacity:0} to{transform:translateY(0);opacity:1} }
+  .modal-header { padding: 24px 28px 18px; display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 1px solid var(--border); }
+  .modal-title { font-size: 17px; font-weight: 700; color: var(--navy); }
+  .modal-ref { font-size: 11px; font-family: 'DM Mono', monospace; color: var(--text-muted); margin-top: 2px; }
+  .modal-close { width: 30px; height: 30px; border-radius: var(--radius); background: var(--surface); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 18px; }
+  .modal-body { padding: 24px 28px; }
+  .modal-section { margin-bottom: 22px; }
+  .modal-section-title { font-size: 11px; font-weight: 700; color: var(--orange); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 12px; font-family: 'DM Mono', monospace; }
+  .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .detail-item { background: var(--surface); border-radius: var(--radius); padding: 12px 14px; border: 1px solid var(--border); }
+  .detail-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+  .detail-val { font-size: 14px; font-weight: 600; color: var(--navy); }
+  .supply-timeline { display: flex; flex-direction: column; gap: 0; position: relative; padding-left: 20px; }
+  .supply-timeline::before { content:''; position:absolute; left:6px; top:8px; bottom:8px; width:2px; background:var(--border); }
+  .timeline-item { display: flex; align-items: center; gap: 12px; padding: 8px 0; position: relative; }
+  .timeline-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--border); background: white; position: absolute; left: -20px; }
+  .timeline-dot.active { background: var(--orange); border-color: var(--orange); }
+  .timeline-dot.done { background: #10b981; border-color: #10b981; }
+  .timeline-label { font-size: 12px; font-weight: 500; }
+  .timeline-label.active { color: var(--orange); font-weight: 700; }
+  .timeline-label.done { color: var(--text-muted); }
+  .upload-section { background: white; border-radius: var(--radius-lg); border: 1px solid var(--border); box-shadow: var(--shadow-sm); padding: 24px; margin-bottom: 28px; }
+  .upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .upload-zone { border: 2px dashed var(--border-strong); border-radius: var(--radius-lg); padding: 32px 20px; text-align: center; cursor: pointer; transition: all 0.2s ease; background: var(--surface); position: relative; }
+  .upload-zone:hover, .upload-zone.dragover { border-color: var(--navy); background: var(--surface2); }
+  .upload-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .upload-icon { width: 40px; height: 40px; margin: 0 auto 12px; background: var(--navy-dark); border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+  .upload-icon svg { width: 20px; height: 20px; color: white; }
+  .upload-title { font-size: 14px; font-weight: 700; color: var(--navy); margin-bottom: 4px; }
+  .upload-sub { font-size: 12px; color: var(--text-muted); }
+  .upload-hint { font-size: 11px; color: var(--text-muted); margin-top: 8px; font-family: 'DM Mono', monospace; background: var(--surface2); padding: 4px 8px; border-radius: 6px; display: inline-block; }
+  .upload-success { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: var(--radius); padding: 10px 14px; font-size: 12px; color: #166534; margin-top: 10px; display: none; align-items: center; gap: 6px; }
+  .ai-panel { background: linear-gradient(135deg, var(--navy-dark) 0%, var(--navy) 100%); border-radius: var(--radius-lg); padding: 24px; color: white; margin-bottom: 28px; border: 1px solid rgba(255,255,255,0.08); position: relative; overflow: hidden; }
+  .ai-tag { font-size: 10px; font-weight: 700; background: var(--orange); color: white; padding: 3px 8px; border-radius: 4px; letter-spacing: 1px; text-transform: uppercase; font-family: 'DM Mono', monospace; display: inline-block; margin-bottom: 10px; }
+  .ai-panel h3 { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+  .ai-response { font-size: 13px; color: rgba(255,255,255,0.75); line-height: 1.7; min-height: 44px; }
+  .ai-input-wrap { display: flex; gap: 10px; margin-top: 16px; }
+  .ai-input { flex: 1; padding: 10px 14px; border-radius: var(--radius); border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.1); color: white; font-size: 13px; outline: none; font-family: 'Space Grotesk', sans-serif; }
+  .ai-input::placeholder { color: rgba(255,255,255,0.35); }
+  .ai-input:focus { border-color: var(--orange); }
+  .page { display: none; }
+  .page.active { display: block; }
+  .toast { position: fixed; bottom: 24px; right: 24px; background: var(--navy-dark); color: white; padding: 12px 18px; border-radius: var(--radius-lg); font-size: 13px; font-weight: 500; box-shadow: var(--shadow-lg); z-index: 999; transform: translateY(80px); opacity: 0; transition: all 0.3s ease; display: flex; align-items: center; gap: 8px; border-left: 3px solid var(--orange); }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .stat-strip { display: flex; background: white; border-radius: var(--radius-lg); border: 1px solid var(--border); box-shadow: var(--shadow-sm); overflow: hidden; margin-bottom: 28px; }
+  .stat-cell { flex: 1; padding: 16px 20px; border-right: 1px solid var(--border); }
+  .stat-cell:last-child { border-right: none; }
+  .stat-cell-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; font-family: 'DM Mono', monospace; margin-bottom: 6px; }
+  .stat-cell-val { font-size: 20px; font-weight: 700; color: var(--navy); }
+  .stat-cell-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  .text-orange { color: var(--orange) !important; }
+  .text-green { color: #10b981 !important; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  .form-group.full { grid-column: 1 / -1; }
+  .form-label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; }
+  .form-input { padding: 9px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius); font-size: 13px; font-family: 'Space Grotesk', sans-serif; background: var(--surface); color: var(--text); outline: none; transition: border-color 0.18s; }
+  .form-input:focus { border-color: var(--navy); background: white; }
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-text">Stock<span>Flow</span></div>
+    <div class="logo-sub">Literie Pro</div>
+  </div>
+  <nav class="nav">
+    <div class="nav-section-label">Navigation</div>
+    <button class="nav-item active" onclick="showPage('dashboard',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      <span>Tableau de bord</span>
+    </button>
+    <button class="nav-item" onclick="showPage('products',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      <span>Produits</span>
+    </button>
+    <button class="nav-item" onclick="showPage('supply',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 8h14M5 12h14M5 16h6"/><rect x="2" y="4" width="20" height="16" rx="2"/></svg>
+      <span>Approvisionnement</span>
+    </button>
+    <button class="nav-item" onclick="showPage('import',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <span>Import fichiers</span>
+    </button>
+    <div class="nav-section-label" style="margin-top:12px">Outils</div>
+    <button class="nav-item" onclick="showPage('analytics',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      <span>Analyses</span>
+    </button>
+    <button class="nav-item" onclick="showPage('share',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+      <span>Partage</span>
+    </button>
+  </nav>
+  <div class="sidebar-footer">StockFlow v2.1 — 2025</div>
+</aside>
+
+<main class="main">
+  <header class="topbar">
+    <div class="topbar-title" id="page-title">Tableau de bord</div>
+    <div class="topbar-actions">
+      <span class="badge-live">● LIVE</span>
+      <button class="btn btn-orange btn-sm" onclick="openAddProduct()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Ajouter produit
+      </button>
+    </div>
+  </header>
+
+  <!-- DASHBOARD -->
+  <div class="content page active" id="page-dashboard">
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-label">Produits actifs</div><div class="kpi-value" id="kpi-products">0</div><div class="kpi-sub"><span class="kpi-dot" style="background:var(--navy)"></span>références catalogue</div></div>
+      <div class="kpi-card orange"><div class="kpi-label">Alertes stock</div><div class="kpi-value text-orange" id="kpi-alerts">0</div><div class="kpi-sub"><span class="kpi-dot" style="background:var(--orange)"></span>seuil critique</div></div>
+      <div class="kpi-card green"><div class="kpi-label">En appro.</div><div class="kpi-value text-green" id="kpi-supply">0</div><div class="kpi-sub"><span class="kpi-dot" style="background:#10b981"></span>commandes actives</div></div>
+      <div class="kpi-card amber"><div class="kpi-label">Au port</div><div class="kpi-value" style="color:#d97706" id="kpi-port">0</div><div class="kpi-sub"><span class="kpi-dot" style="background:#f59e0b"></span>arrivées imminentes</div></div>
+    </div>
+    <div class="stat-strip">
+      <div class="stat-cell"><div class="stat-cell-label">Stock total</div><div class="stat-cell-val" id="stat-total">0 u.</div><div class="stat-cell-sub">toutes références</div></div>
+      <div class="stat-cell"><div class="stat-cell-label">Stand by</div><div class="stat-cell-val" id="stat-standby">0</div><div class="stat-cell-sub">en attente</div></div>
+      <div class="stat-cell"><div class="stat-cell-label">En production</div><div class="stat-cell-val" id="stat-prod">0</div><div class="stat-cell-sub">en fabrication</div></div>
+      <div class="stat-cell"><div class="stat-cell-label">En mer</div><div class="stat-cell-val" id="stat-mer">0</div><div class="stat-cell-sub">en transit</div></div>
+      <div class="stat-cell"><div class="stat-cell-label">Dernier import</div><div class="stat-cell-val" style="font-size:14px" id="stat-import">—</div><div class="stat-cell-sub">fichier chargé</div></div>
+    </div>
+    <div class="ai-panel">
+      <div class="ai-tag">IA Intégrée</div>
+      <h3>Analyse intelligente des stocks</h3>
+      <div class="ai-response" id="ai-response">Posez une question sur vos stocks ou demandez une analyse d'approvisionnement...</div>
+      <div class="ai-input-wrap">
+        <input class="ai-input" id="ai-q" placeholder="Ex : Quels produits sont en rupture ? Analyse mon approvisionnement..." onkeydown="if(event.key==='Enter')askAI()">
+        <button class="btn btn-orange" onclick="askAI()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          Analyser
+        </button>
+      </div>
+    </div>
+    <div class="section-header">
+      <div class="section-title">Alertes & Produits critiques</div>
+      <button class="btn btn-ghost btn-sm" onclick="showPage('products',null)">Voir tout →</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Produit</th><th>Stock</th><th>Statut appro.</th><th>Dernière appro.</th><th>Action</th></tr></thead>
+        <tbody id="alerts-table"><tr><td colspan="5" style="text-align:center;padding:30px;color:var(--text-muted)">Importez vos produits pour voir les alertes</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- PRODUCTS -->
+  <div class="content page" id="page-products">
+    <div class="toolbar">
+      <div class="search-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input class="search-input" id="search-input" placeholder="Rechercher par nom, référence, taille..." oninput="filterProducts()">
+      </div>
+      <select class="filter-sel" id="filter-status" onchange="filterProducts()">
+        <option value="">Tous les statuts</option>
+        <option>Stand by</option><option>En production</option><option>En mer</option><option>Au port</option>
+      </select>
+      <select class="filter-sel" id="filter-cat" onchange="filterProducts()">
+        <option value="">Toutes catégories</option>
+        <option>Matelas</option><option>Sommier</option><option>Oreiller</option><option>Couette</option><option>Surmatelas</option><option>Lit complet</option>
+      </select>
+      <button class="btn btn-primary btn-sm" onclick="exportProducts()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
+        Exporter Excel
+      </button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Réf.</th><th>Produit</th><th>Taille</th><th>Poids</th><th>Composition</th><th>Stock</th><th>Statut</th><th>Dernière appro.</th><th>Actions</th></tr></thead>
+        <tbody id="products-table"><tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted)">Aucun produit — importez un fichier ou chargez les données démo</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- SUPPLY -->
+  <div class="content page" id="page-supply">
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-label">Stand by</div><div class="kpi-value" id="sup-standby">0</div></div>
+      <div class="kpi-card orange"><div class="kpi-label">En production</div><div class="kpi-value text-orange" id="sup-prod">0</div></div>
+      <div class="kpi-card" style="--c:#3b82f6"><div class="kpi-label">En mer</div><div class="kpi-value" style="color:#1d4ed8" id="sup-mer">0</div></div>
+      <div class="kpi-card green"><div class="kpi-label">Au port</div><div class="kpi-value text-green" id="sup-port">0</div></div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Référence</th><th>Produit</th><th>Statut</th><th>Dernière appro.</th><th>Stock actuel</th><th>Fiche</th></tr></thead>
+        <tbody id="supply-table"><tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">Aucune donnée d'approvisionnement</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- IMPORT -->
+  <div class="content page" id="page-import">
+    <div class="upload-section">
+      <div class="upload-grid">
+        <div>
+          <div style="margin-bottom:10px;font-size:13px;font-weight:600;color:var(--navy)">Importer les produits</div>
+          <div class="upload-zone" id="zone-products" ondragover="dragOver(event,'zone-products')" ondragleave="dragLeave('zone-products')" ondrop="dropFile(event,'products')">
+            <input type="file" accept=".xlsx,.xls,.csv" onchange="handleFile(event,'products')">
+            <div class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+            <div class="upload-title">Glissez votre fichier produits</div>
+            <div class="upload-sub">ou cliquez pour sélectionner</div>
+            <div class="upload-hint">Excel .xlsx · CSV</div>
+          </div>
+          <div class="upload-success" id="success-products"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px"><polyline points="20 6 9 17 4 12"/></svg><span id="success-products-text"></span></div>
+          <div style="margin-top:14px;font-size:12px;font-family:'DM Mono',monospace;background:var(--surface);padding:12px;border-radius:var(--radius);border:1px solid var(--border);line-height:2;color:var(--navy)">
+            <strong style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted)">Colonnes attendues</strong><br>
+            Référence · Nom · Catégorie<br>Taille · Poids · Composition<br>Stock · Statut · Dernière appro.
+          </div>
+        </div>
+        <div>
+          <div style="margin-bottom:10px;font-size:13px;font-weight:600;color:var(--navy)">Importer les stocks</div>
+          <div class="upload-zone" id="zone-stocks" ondragover="dragOver(event,'zone-stocks')" ondragleave="dragLeave('zone-stocks')" ondrop="dropFile(event,'stocks')">
+            <input type="file" accept=".xlsx,.xls,.csv" onchange="handleFile(event,'stocks')">
+            <div class="upload-icon" style="background:var(--orange)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></div>
+            <div class="upload-title">Glissez votre fichier stocks</div>
+            <div class="upload-sub">ou cliquez pour sélectionner</div>
+            <div class="upload-hint">Excel .xlsx · CSV</div>
+          </div>
+          <div class="upload-success" id="success-stocks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px"><polyline points="20 6 9 17 4 12"/></svg><span id="success-stocks-text"></span></div>
+          <div style="margin-top:14px;font-size:12px;font-family:'DM Mono',monospace;background:var(--surface);padding:12px;border-radius:var(--radius);border:1px solid var(--border);line-height:2;color:var(--navy)">
+            <strong style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted)">Colonnes attendues</strong><br>
+            Référence · Quantité en stock<br>Seuil d'alerte (optionnel)<br>Date de mise à jour
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--border);display:flex;align-items:center;gap:16px">
+        <div style="font-size:13px;font-weight:600;color:var(--navy)">Données de démonstration</div>
+        <button class="btn btn-ghost" onclick="loadDemo()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Charger données démo literie
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ANALYTICS -->
+  <div class="content page" id="page-analytics">
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-label">Taux disponibilité</div><div class="kpi-value" id="ana-dispo">—</div></div>
+      <div class="kpi-card orange"><div class="kpi-label">Produits critiques</div><div class="kpi-value text-orange" id="ana-crit">—</div></div>
+      <div class="kpi-card green"><div class="kpi-label">En transit</div><div class="kpi-value text-green" id="ana-transit">—</div></div>
+      <div class="kpi-card amber"><div class="kpi-label">Total références</div><div class="kpi-value" id="ana-cover">—</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+      <div class="table-wrap" style="padding:20px">
+        <div class="section-title" style="margin-bottom:16px">Répartition par statut</div>
+        <div id="chart-status" style="display:flex;flex-direction:column;gap:10px"></div>
+      </div>
+      <div class="table-wrap" style="padding:20px">
+        <div class="section-title" style="margin-bottom:16px">Top 5 stocks les plus faibles</div>
+        <div id="chart-low" style="display:flex;flex-direction:column;gap:10px"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SHARE -->
+  <div class="content page" id="page-share">
+    <div class="upload-section">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+        <div style="background:var(--surface);border-radius:var(--radius-lg);padding:20px;border:1px solid var(--border)">
+          <div style="font-size:14px;font-weight:700;color:var(--navy);margin-bottom:6px">Export Excel</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">Télécharger toutes les données en .xlsx avec stocks et statuts</div>
+          <button class="btn btn-primary btn-sm" onclick="exportProducts()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>Télécharger .xlsx
+          </button>
+        </div>
+        <div style="background:var(--surface);border-radius:var(--radius-lg);padding:20px;border:1px solid var(--border)">
+          <div style="font-size:14px;font-weight:700;color:var(--navy);margin-bottom:6px">Export CSV</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">Format universel compatible Google Sheets, LibreOffice...</div>
+          <button class="btn btn-ghost btn-sm" onclick="exportCSV()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Télécharger .csv
+          </button>
+        </div>
+        <div style="background:var(--surface);border-radius:var(--radius-lg);padding:20px;border:1px solid var(--border)">
+          <div style="font-size:14px;font-weight:700;color:var(--navy);margin-bottom:6px">Copier le lien</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">Partager l'application avec votre équipe via un lien direct</div>
+          <button class="btn btn-orange btn-sm" onclick="copyLink()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>Copier le lien
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- MODAL FICHE PRODUIT -->
+<div class="modal-overlay" id="product-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div><div class="modal-title" id="modal-name">Nom du produit</div><div class="modal-ref" id="modal-ref">REF-000</div></div>
+      <button class="modal-close" onclick="closeModal('product-modal')">×</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<!-- MODAL AJOUT/EDIT -->
+<div class="modal-overlay" id="add-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div><div class="modal-title" id="add-modal-title">Ajouter un produit</div><div class="modal-ref">Fiche produit literie</div></div>
+      <button class="modal-close" onclick="closeModal('add-modal')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Référence *</label><input class="form-input" id="f-ref" placeholder="LIT-001"></div>
+        <div class="form-group"><label class="form-label">Catégorie</label>
+          <select class="form-input" id="f-cat"><option>Matelas</option><option>Sommier</option><option>Oreiller</option><option>Couette</option><option>Surmatelas</option><option>Lit complet</option></select>
+        </div>
+        <div class="form-group full"><label class="form-label">Nom du produit *</label><input class="form-input" id="f-name" placeholder="Ex : Matelas Mémoire de Forme Premium"></div>
+        <div class="form-group"><label class="form-label">Taille</label><input class="form-input" id="f-size" placeholder="160x200 cm"></div>
+        <div class="form-group"><label class="form-label">Poids</label><input class="form-input" id="f-weight" placeholder="28 kg"></div>
+        <div class="form-group full"><label class="form-label">Composition</label><input class="form-input" id="f-comp" placeholder="100% mousse à mémoire de forme, CertiPUR..."></div>
+        <div class="form-group"><label class="form-label">Stock actuel</label><input class="form-input" id="f-stock" type="number" placeholder="0" min="0"></div>
+        <div class="form-group"><label class="form-label">Seuil d'alerte</label><input class="form-input" id="f-seuil" type="number" placeholder="20" min="0"></div>
+        <div class="form-group"><label class="form-label">Statut approvisionnement</label>
+          <select class="form-input" id="f-status"><option>Stand by</option><option>En production</option><option>En mer</option><option>Au port</option></select>
+        </div>
+        <div class="form-group"><label class="form-label">Dernière appro.</label><input class="form-input" id="f-date" type="date"></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="closeModal('add-modal')">Annuler</button>
+        <button class="btn btn-orange" onclick="saveProduct()" id="save-btn">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px"><polyline points="20 6 9 17 4 12"/></svg><span id="toast-msg"></span></div>
+
+<script>
+let products = [];
+let editIndex = -1;
+
+function showPage(id, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  const titles = {dashboard:'Tableau de bord',products:'Produits',supply:'Approvisionnement',import:'Import fichiers',analytics:'Analyses',share:'Partage & Export'};
+  document.getElementById('page-title').textContent = titles[id]||'';
+  if (btn) btn.classList.add('active');
+  if (id==='analytics') renderAnalytics();
+  if (id==='supply') renderSupplyPage();
+}
+
+function updateKPIs() {
+  document.getElementById('kpi-products').textContent = products.length;
+  document.getElementById('kpi-alerts').textContent = products.filter(p=>(p.stock||0)<(p.seuil||20)).length;
+  document.getElementById('kpi-supply').textContent = products.filter(p=>['En production','En commande','En mer'].includes(p.statut)).length;
+  document.getElementById('kpi-port').textContent = products.filter(p=>p.statut==='Au port').length;
+  document.getElementById('stat-total').textContent = products.reduce((a,p)=>a+(p.stock||0),0)+' u.';
+  document.getElementById('stat-standby').textContent = products.filter(p=>p.statut==='Stand by').length;
+  document.getElementById('stat-prod').textContent = products.filter(p=>p.statut==='En production').length;
+  document.getElementById('stat-mer').textContent = products.filter(p=>p.statut==='En mer').length;
+  renderAlertsTable();
+}
+
+function renderAlertsTable() {
+  const critical = products.filter(p=>(p.stock||0)<(p.seuil||20)).slice(0,8);
+  const tbody = document.getElementById('alerts-table');
+  if (!critical.length) { tbody.innerHTML=`<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--text-muted)">✓ Aucune alerte critique</td></tr>`; return; }
+  tbody.innerHTML = critical.map(p=>{
+    const idx=products.indexOf(p);
+    const pct=Math.min(100,((p.stock||0)/(p.seuil||20))*100);
+    return `<tr onclick="openProduct(${idx})">
+      <td><div class="product-name">${p.nom}</div><div class="product-ref">${p.ref}</div></td>
+      <td><div class="stock-bar-wrap"><div class="stock-num"><span>${p.stock||0}</span><span style="color:var(--text-muted);font-size:11px">/${p.seuil||20}</span></div><div class="stock-bar"><div class="stock-fill fill-crit" style="width:${pct}%"></div></div></div></td>
+      <td>${statusBadge(p.statut)}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-muted)">${p.dateAppro||'—'}</td>
+      <td><button class="btn btn-orange btn-sm" onclick="event.stopPropagation();openEdit(${idx})">Modifier</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderProductsTable() {
+  const q=(document.getElementById('search-input').value||'').toLowerCase();
+  const st=document.getElementById('filter-status').value;
+  const ct=document.getElementById('filter-cat').value;
+  let list=products.filter(p=>{
+    const mQ=!q||(p.nom||'').toLowerCase().includes(q)||(p.ref||'').toLowerCase().includes(q)||(p.taille||'').toLowerCase().includes(q);
+    const mS=!st||p.statut===st;
+    const mC=!ct||p.categorie===ct;
+    return mQ&&mS&&mC;
+  });
+  const tbody=document.getElementById('products-table');
+  if (!list.length) { tbody.innerHTML=`<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted)">Aucun produit trouvé</td></tr>`; return; }
+  const maxS=Math.max(...products.map(p=>p.stock||0),1);
+  tbody.innerHTML=list.map(p=>{
+    const idx=products.indexOf(p);
+    const pct=Math.min(100,((p.stock||0)/maxS)*100);
+    const cls=(p.stock||0)<(p.seuil||20)?'fill-crit':pct<50?'fill-low':'fill-ok';
+    return `<tr onclick="openProduct(${idx})">
+      <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-muted)">${p.ref||'—'}</td>
+      <td><div class="product-name">${p.nom||'—'}</div><div class="product-ref">${p.categorie||''}</div></td>
+      <td style="font-size:13px">${p.taille||'—'}</td>
+      <td style="font-size:13px">${p.poids||'—'}</td>
+      <td style="font-size:12px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.composition||''}">${p.composition||'—'}</td>
+      <td><div class="stock-bar-wrap"><div class="stock-num">${p.stock||0}</div><div class="stock-bar"><div class="stock-fill ${cls}" style="width:${pct}%"></div></div></div></td>
+      <td>${statusBadge(p.statut)}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-muted)">${p.dateAppro||'—'}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openEdit(${idx})" style="margin-right:4px">Éditer</button>
+        <button class="btn btn-sm" style="background:#fee2e2;color:#b91c1c;border:none" onclick="event.stopPropagation();deleteProduct(${idx})">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function renderSupplyPage() {
+  document.getElementById('sup-standby').textContent=products.filter(p=>p.statut==='Stand by').length;
+  document.getElementById('sup-prod').textContent=products.filter(p=>p.statut==='En production').length;
+  document.getElementById('sup-mer').textContent=products.filter(p=>p.statut==='En mer').length;
+  document.getElementById('sup-port').textContent=products.filter(p=>p.statut==='Au port').length;
+  const tbody=document.getElementById('supply-table');
+  if (!products.length) { tbody.innerHTML=`<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">Aucune donnée</td></tr>`; return; }
+  tbody.innerHTML=products.map((p,i)=>`
+    <tr onclick="openProduct(${i})">
+      <td style="font-family:'DM Mono',monospace;font-size:12px">${p.ref||'—'}</td>
+      <td><div class="product-name">${p.nom}</div></td>
+      <td>${statusBadge(p.statut)}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-muted)">${p.dateAppro||'—'}</td>
+      <td style="font-weight:700;color:var(--navy)">${p.stock||0} u.</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openProduct(${i})">Fiche →</button></td>
+    </tr>`).join('');
+}
+
+function renderAnalytics() {
+  if (!products.length) return;
+  const total=products.length;
+  const crit=products.filter(p=>(p.stock||0)<(p.seuil||20)).length;
+  const transit=products.filter(p=>['En mer','Au port','En commande'].includes(p.statut)).length;
+  document.getElementById('ana-dispo').textContent=Math.round((1-crit/total)*100)+'%';
+  document.getElementById('ana-crit').textContent=crit;
+  document.getElementById('ana-transit').textContent=transit;
+  document.getElementById('ana-cover').textContent=total;
+  const statuses=['Stand by','En production','En mer','Au port'];
+  const colors=['#94a3b8','#f59e0b','#3b82f6','#10b981'];
+  document.getElementById('chart-status').innerHTML=statuses.map((s,i)=>{
+    const cnt=products.filter(p=>p.statut===s).length;
+    const pct=total?Math.round(cnt/total*100):0;
+    return `<div><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span>${s}</span><span style="font-weight:700">${cnt} <span style="color:var(--text-muted)">(${pct}%)</span></span></div><div class="stock-bar" style="height:8px"><div class="stock-fill" style="width:${pct}%;background:${colors[i]}"></div></div></div>`;
+  }).join('');
+  const low=[...products].sort((a,b)=>(a.stock||0)-(b.stock||0)).slice(0,5);
+  const maxS=Math.max(...low.map(p=>p.stock||0),1);
+  document.getElementById('chart-low').innerHTML=low.map(p=>`<div><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span style="font-weight:500">${p.nom}</span><span style="font-weight:700;color:var(--orange)">${p.stock||0} u.</span></div><div class="stock-bar" style="height:8px"><div class="stock-fill fill-crit" style="width:${((p.stock||0)/maxS)*100}%"></div></div></div>`).join('');
+}
+
+function statusBadge(s) {
+  const map={'Stand by':'s-standby','En production':'s-production','En mer':'s-mer','Au port':'s-port','En commande':'s-production'};
+  return `<span class="status-badge ${map[s]||'s-standby'}">${s||'Stand by'}</span>`;
+}
+
+function supplySteps(s) {
+  const steps=['Stand by','En commande','En mer','Au port'];
+  const normalize={'En production':'En commande'};
+  const cur=normalize[s]||s;
+  return steps.map(st=>{
+    const done=steps.indexOf(st)<steps.indexOf(cur);
+    const active=st===cur;
+    return `<div class="timeline-item"><div class="timeline-dot ${active?'active':done?'done':''}"></div><span class="timeline-label ${active?'active':done?'done':''}">${st}</span></div>`;
+  }).join('');
+}
+
+function openProduct(idx) {
+  const p=products[idx]; if(!p) return;
+  document.getElementById('modal-name').textContent=p.nom||'—';
+  document.getElementById('modal-ref').textContent=p.ref||'—';
+  const maxS=Math.max(...products.map(x=>x.stock||0),1);
+  const pct=Math.min(100,((p.stock||0)/maxS)*100);
+  const cls=(p.stock||0)<(p.seuil||20)?'fill-crit':pct<50?'fill-low':'fill-ok';
+  document.getElementById('modal-body').innerHTML=`
+    <div class="modal-section">
+      <div class="modal-section-title">Détails produit</div>
+      <div class="detail-grid">
+        <div class="detail-item"><div class="detail-label">Catégorie</div><div class="detail-val">${p.categorie||'—'}</div></div>
+        <div class="detail-item"><div class="detail-label">Référence</div><div class="detail-val" style="font-family:'DM Mono',monospace">${p.ref||'—'}</div></div>
+        <div class="detail-item"><div class="detail-label">Taille</div><div class="detail-val">${p.taille||'—'}</div></div>
+        <div class="detail-item"><div class="detail-label">Poids</div><div class="detail-val">${p.poids||'—'}</div></div>
+        <div class="detail-item" style="grid-column:1/-1"><div class="detail-label">Composition</div><div class="detail-val" style="font-size:13px;font-weight:400;line-height:1.5">${p.composition||'—'}</div></div>
+      </div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-section-title">Stock & Approvisionnement</div>
+      <div class="detail-grid">
+        <div class="detail-item"><div class="detail-label">Stock actuel</div><div class="detail-val" style="font-size:22px">${p.stock||0} <span style="font-size:13px;color:var(--text-muted)">unités</span></div></div>
+        <div class="detail-item"><div class="detail-label">Seuil d'alerte</div><div class="detail-val">${p.seuil||20} u.</div></div>
+        <div class="detail-item"><div class="detail-label">Statut</div><div class="detail-val">${statusBadge(p.statut)}</div></div>
+        <div class="detail-item"><div class="detail-label">Dernière appro.</div><div class="detail-val" style="font-family:'DM Mono',monospace;font-size:13px">${p.dateAppro||'—'}</div></div>
+      </div>
+      <div style="margin-top:12px"><div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:1px">Niveau de stock</div><div class="stock-bar" style="height:10px"><div class="stock-fill ${cls}" style="width:${pct}%"></div></div></div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-section-title">Suivi de l'approvisionnement</div>
+      <div class="supply-timeline">${supplySteps(p.statut)}</div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:4px">
+      <button class="btn btn-orange" onclick="closeModal('product-modal');openEdit(${idx})">Modifier</button>
+      <button class="btn btn-ghost" onclick="closeModal('product-modal')">Fermer</button>
+    </div>`;
+  document.getElementById('product-modal').classList.add('open');
+}
+
+function openAddProduct() {
+  editIndex=-1;
+  document.getElementById('add-modal-title').textContent='Ajouter un produit';
+  document.getElementById('save-btn').textContent='Enregistrer';
+  ['f-ref','f-name','f-size','f-weight','f-comp','f-stock','f-seuil','f-date'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('f-cat').value='Matelas';
+  document.getElementById('f-status').value='Stand by';
+  document.getElementById('add-modal').classList.add('open');
+}
+
+function openEdit(idx) {
+  editIndex=idx;
+  const p=products[idx];
+  document.getElementById('add-modal-title').textContent='Modifier le produit';
+  document.getElementById('save-btn').textContent='Mettre à jour';
+  document.getElementById('f-ref').value=p.ref||'';
+  document.getElementById('f-name').value=p.nom||'';
+  document.getElementById('f-cat').value=p.categorie||'Matelas';
+  document.getElementById('f-size').value=p.taille||'';
+  document.getElementById('f-weight').value=p.poids||'';
+  document.getElementById('f-comp').value=p.composition||'';
+  document.getElementById('f-stock').value=p.stock||0;
+  document.getElementById('f-seuil').value=p.seuil||20;
+  document.getElementById('f-status').value=p.statut||'Stand by';
+  document.getElementById('f-date').value=p.dateAppro||'';
+  document.getElementById('add-modal').classList.add('open');
+}
+
+function saveProduct() {
+  const p={
+    ref:document.getElementById('f-ref').value.trim(),
+    nom:document.getElementById('f-name').value.trim(),
+    categorie:document.getElementById('f-cat').value,
+    taille:document.getElementById('f-size').value.trim(),
+    poids:document.getElementById('f-weight').value.trim(),
+    composition:document.getElementById('f-comp').value.trim(),
+    stock:parseInt(document.getElementById('f-stock').value)||0,
+    seuil:parseInt(document.getElementById('f-seuil').value)||20,
+    statut:document.getElementById('f-status').value,
+    dateAppro:document.getElementById('f-date').value
+  };
+  if (!p.ref||!p.nom) { showToast('Référence et nom requis'); return; }
+  if (editIndex>=0) { products[editIndex]=p; showToast('Produit mis à jour'); }
+  else { products.push(p); showToast('Produit ajouté'); }
+  closeModal('add-modal');
+  updateKPIs(); renderProductsTable();
+}
+
+function deleteProduct(idx) {
+  if (!confirm('Supprimer ce produit ?')) return;
+  products.splice(idx,1);
+  updateKPIs(); renderProductsTable();
+  showToast('Produit supprimé');
+}
+
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');}));
+function filterProducts() { renderProductsTable(); }
+
+function dragOver(e,id) { e.preventDefault(); document.getElementById(id).classList.add('dragover'); }
+function dragLeave(id) { document.getElementById(id).classList.remove('dragover'); }
+function dropFile(e,type) { e.preventDefault(); dragLeave(type==='products'?'zone-products':'zone-stocks'); const f=e.dataTransfer.files[0]; if(f)processFile(f,type); }
+function handleFile(e,type) { const f=e.target.files[0]; if(f)processFile(f,type); }
+
+function processFile(file,type) {
+  const reader=new FileReader();
+  reader.onload=function(e){
+    const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+    const sheet=wb.Sheets[wb.SheetNames[0]];
+    const data=XLSX.utils.sheet_to_json(sheet,{defval:''});
+    if(type==='products') importProducts(data,file.name);
+    else importStocks(data,file.name);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+const COL_MAP={
+  ref:['référence','ref','reference','sku','code','id','code produit'],
+  nom:['nom','name','produit','product','désignation','libellé','article'],
+  categorie:['catégorie','categorie','category','type','famille'],
+  taille:['taille','size','dimensions','format'],
+  poids:['poids (kg)','poids','weight','masse'],
+  composition:['composition','matière','matiere','material'],
+  stock:['stock','quantité','quantite','qty','qté','stock actuel','quantite en stock'],
+  seuil:['seuil','seuil alerte','alerte','minimum','stock min'],
+  statut:['statut appro','statut approvisionnement','statut','status','état appro','etat appro','appro'],
+  dateAppro:['dernière appro.','dernière appro','derniere appro.','derniere appro','date appro.','date appro','date approvisionnement','last supply']
+};
+
+function findCol(row,field) {
+  const keys=Object.keys(row).map(k=>k.toLowerCase().trim());
+  const aliases=COL_MAP[field]||[];
+  for(const a of aliases){
+    const idx=keys.indexOf(a);
+    if(idx>=0)return Object.keys(row)[idx];
+    const partial=keys.findIndex(k=>k.includes(a)||a.includes(k));
+    if(partial>=0)return Object.keys(row)[partial];
+  }
+  return null;
+}
+
+function importProducts(data,fname) {
+  if(!data.length){showToast('Fichier vide ou non reconnu');return;}
+  // Filtrer les lignes séparateurs (── CLOUD POINT ──) et lignes vides
+  const filtered=data.filter(row=>{
+    const refCol=findCol(row,'ref');
+    const nomCol=findCol(row,'nom');
+    const refVal=refCol?String(row[refCol]||'').trim():'';
+    const nomVal=nomCol?String(row[nomCol]||'').trim():'';
+    return refVal && !refVal.includes('──') && !refVal.includes('--') && refVal!=='NaN'
+        && nomVal && nomVal!=='NaN' && nomVal!=='undefined';
+  });
+  products=filtered.map(row=>{
+    const get=f=>{const k=findCol(row,f);return k?String(row[k]||'').trim():'';};
+    return {
+      ref:get('ref')||'REF-'+Math.random().toString(36).substr(2,5).toUpperCase(),
+      nom:get('nom')||'Produit sans nom',
+      categorie:get('categorie')||'Matelas',
+      taille:get('taille')||'',
+      poids:get('poids')||'',
+      composition:get('composition')||'',
+      stock:parseInt(get('stock'))||0,
+      seuil:parseInt(get('seuil'))||20,
+      statut:normalizeStatus(get('statut'))||'Stand by',
+      dateAppro:get('dateAppro')||''
+    };
+  });
+  document.getElementById('success-products').style.display='flex';
+  document.getElementById('success-products-text').textContent=`${products.length} produits importés depuis ${fname}`;
+  document.getElementById('stat-import').textContent=new Date().toLocaleDateString('fr-FR');
+  updateKPIs(); renderProductsTable();
+  showToast(`${products.length} produits importés`);
+}
+
+function importStocks(data,fname) {
+  if(!data.length){showToast('Fichier vide');return;}
+  let updated=0;
+  data.forEach(row=>{
+    const refCol=findCol(row,'ref');
+    const stockCol=findCol(row,'stock');
+    if(!refCol)return;
+    const ref=String(row[refCol]||'').trim();
+    const qty=parseInt(stockCol?row[stockCol]:0)||0;
+    const idx=products.findIndex(p=>p.ref.toLowerCase()===ref.toLowerCase());
+    if(idx>=0){products[idx].stock=qty;updated++;}
+  });
+  document.getElementById('success-stocks').style.display='flex';
+  document.getElementById('success-stocks-text').textContent=`${updated} stocks mis à jour depuis ${fname}`;
+  updateKPIs(); renderProductsTable();
+  showToast(`${updated} stocks mis à jour`);
+}
+
+function normalizeStatus(s) {
+  // Strip emojis and special chars, lowercase
+  s=(s||'').replace(/[\u{1F300}-\u{1FFFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}⚠️✅🔴🏗️🚢📦–—]/gu,' ').toLowerCase().trim();
+  if(s.includes('port'))return 'Au port';
+  if(s.includes('mer')||s.includes('transit')||s.includes('ship'))return 'En mer';
+  if(s.includes('commande')||s.includes('prod'))return 'En production';
+  if(s.includes('stand')||s.includes('attente'))return 'Stand by';
+  if(s==='-'||s===''||s==='–')return 'Stand by';
+  return 'Stand by';
+}
+
+function loadDemo() {
+  products=[
+    {ref:'MAT-001',nom:'Matelas Mémoire de Forme Premium',categorie:'Matelas',taille:'160×200 cm',poids:'32 kg',composition:'70% mousse mémoire de forme, 30% latex naturel — CertiPUR',stock:45,seuil:20,statut:'Stand by',dateAppro:'2025-03-15'},
+    {ref:'MAT-002',nom:'Matelas Ressorts Ensachés Luxe',categorie:'Matelas',taille:'180×200 cm',poids:'38 kg',composition:'Ressorts ensachés 7 zones, garnissage cachemire',stock:12,seuil:20,statut:'En production',dateAppro:'2025-01-20'},
+    {ref:'MAT-003',nom:'Matelas Latex Naturel Ferme',categorie:'Matelas',taille:'140×190 cm',poids:'24 kg',composition:'100% latex naturel certifié Oeko-Tex, housse coton bio',stock:8,seuil:15,statut:'En mer',dateAppro:'2024-11-10'},
+    {ref:'SOM-001',nom:'Sommier Tapissier Premium',categorie:'Sommier',taille:'160×200 cm',poids:'28 kg',composition:'Structure bois massif, tissu velours gris anthracite',stock:30,seuil:10,statut:'Stand by',dateAppro:'2025-02-28'},
+    {ref:'SOM-002',nom:'Sommier à Lattes Chêne Massif',categorie:'Sommier',taille:'180×200 cm',poids:'22 kg',composition:'30 lattes chêne massif, pieds réglables acier chromé',stock:5,seuil:15,statut:'Au port',dateAppro:'2025-04-01'},
+    {ref:'ORL-001',nom:'Oreiller Duvet Oie 800g',categorie:'Oreiller',taille:'65×65 cm',poids:'0.8 kg',composition:"Duvet d'oie 90%, plumes 10% — Housse percale coton 200 fils",stock:120,seuil:50,statut:'Stand by',dateAppro:'2025-03-10'},
+    {ref:'ORL-002',nom:'Oreiller Mémoire Ergonomique',categorie:'Oreiller',taille:'70×40 cm',poids:'1.2 kg',composition:'Mousse viscoélastique à micro-perforations, housse bambou',stock:18,seuil:30,statut:'En production',dateAppro:'2025-02-01'},
+    {ref:'COU-001',nom:'Couette Chaude 400g/m²',categorie:'Couette',taille:'240×260 cm',poids:'2.4 kg',composition:'Garnissage polyester recyclé Oekotex, housse coton 160 fils',stock:55,seuil:25,statut:'Stand by',dateAppro:'2024-12-15'},
+    {ref:'COU-002',nom:'Couette Duvet Canard Légère',categorie:'Couette',taille:'200×200 cm',poids:'1.1 kg',composition:'Duvet canard 80%, plumes 20% — Traçabilité RDS certifiée',stock:3,seuil:20,statut:'En mer',dateAppro:'2024-10-05'},
+    {ref:'SUR-001',nom:'Surmatelas Matelassé Bambou',categorie:'Surmatelas',taille:'160×200 cm',poids:'4 kg',composition:'Garnissage 300g/m², housse bambou certifié OEKO-TEX Standard 100',stock:25,seuil:15,statut:'Au port',dateAppro:'2025-04-10'},
+    {ref:'LIT-001',nom:'Lit Boxspring Velours Navy',categorie:'Lit complet',taille:'180×200 cm',poids:'85 kg',composition:'Structure métal renforcé, mousse HR, tissu velours 100% polyester',stock:7,seuil:5,statut:'En production',dateAppro:'2025-01-05'},
+    {ref:'MAT-004',nom:'Matelas Enfant Anti-acariens',categorie:'Matelas',taille:'90×190 cm',poids:'10 kg',composition:'Mousse HR haute densité, housse anti-acariens lavable 60°C',stock:40,seuil:20,statut:'Stand by',dateAppro:'2025-03-20'},
+  ];
+  document.getElementById('stat-import').textContent='Démo chargée';
+  updateKPIs(); renderProductsTable();
+  showToast('12 produits démo chargés');
+}
+
+function exportProducts() {
+  if(!products.length){showToast('Aucune donnée à exporter');return;}
+  const ws=XLSX.utils.json_to_sheet(products.map(p=>({'Référence':p.ref,'Nom':p.nom,'Catégorie':p.categorie,'Taille':p.taille,'Poids':p.poids,'Composition':p.composition,'Stock':p.stock,'Seuil alerte':p.seuil,'Statut':p.statut,'Dernière appro.':p.dateAppro})));
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Produits');
+  XLSX.writeFile(wb,'StockFlow_'+new Date().toISOString().split('T')[0]+'.xlsx');
+  showToast('Export Excel téléchargé');
+}
+
+function exportCSV() {
+  if(!products.length){showToast('Aucune donnée');return;}
+  const header=['Référence','Nom','Catégorie','Taille','Poids','Composition','Stock','Seuil','Statut','Dernière appro.'];
+  const rows=products.map(p=>[p.ref,p.nom,p.categorie,p.taille,p.poids,p.composition,p.stock,p.seuil,p.statut,p.dateAppro].map(v=>`"${v||''}"`).join(','));
+  const csv=[header.join(','),...rows].join('\n');
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download='StockFlow_'+new Date().toISOString().split('T')[0]+'.csv';
+  a.click();
+  showToast('Export CSV téléchargé');
+}
+
+function copyLink() {
+  navigator.clipboard.writeText(window.location.href).catch(()=>{});
+  showToast('Lien copié dans le presse-papiers');
+}
+
+async function askAI() {
+  const q=document.getElementById('ai-q').value.trim();
+  if(!q) return;
+  const el=document.getElementById('ai-response');
+  el.textContent='⏳ Analyse en cours...';
+  const ctx=`Tu es l'assistant IA de StockFlow, application de gestion stocks pour une entreprise de literie.
+Données actuelles :
+- Produits : ${products.length}
+- Stock total : ${products.reduce((a,p)=>a+(p.stock||0),0)} unités
+- Alertes (< seuil) : ${products.filter(p=>(p.stock||0)<(p.seuil||20)).length}
+- En production : ${products.filter(p=>p.statut==='En production').length}
+- En mer : ${products.filter(p=>p.statut==='En mer').length}
+- Au port : ${products.filter(p=>p.statut==='Au port').length}
+- Stand by : ${products.filter(p=>p.statut==='Stand by').length}
+- 5 plus faibles stocks : ${[...products].sort((a,b)=>(a.stock||0)-(b.stock||0)).slice(0,5).map(p=>`${p.nom} (${p.stock||0} u.)`).join(', ')||'aucun'}
+Réponds en français de manière concise et professionnelle avec des recommandations concrètes si pertinent.`;
+  try {
+    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,system:ctx,messages:[{role:'user',content:q}]})});
+    const data=await res.json();
+    el.textContent=data.content?.[0]?.text||'Aucune réponse.';
+  } catch(e) { el.textContent='Erreur de connexion. Vérifiez votre réseau.'; }
+  document.getElementById('ai-q').value='';
+}
+
+function showToast(msg) {
+  const t=document.getElementById('toast');
+  document.getElementById('toast-msg').textContent=msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+updateKPIs();
+</script>
+</body>
+</html>
