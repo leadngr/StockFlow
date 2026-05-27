@@ -146,6 +146,17 @@
   .ai-input { flex: 1; padding: 10px 14px; border-radius: var(--radius); border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.1); color: white; font-size: 13px; outline: none; font-family: 'Space Grotesk', sans-serif; }
   .ai-input::placeholder { color: rgba(255,255,255,0.35); }
   .ai-input:focus { border-color: var(--orange); }
+  .btn-mic { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; border:1px solid rgba(255,255,255,0.25); background:rgba(255,255,255,0.1); color:white; transition:all 0.18s; font-family:'Space Grotesk',sans-serif; }
+  .btn-mic:hover { background:rgba(255,255,255,0.18); border-color:rgba(255,255,255,0.4); }
+  .btn-mic.listening { background:var(--orange); border-color:var(--orange); animation:micpulse 1.2s infinite; }
+  @keyframes micpulse { 0%,100%{box-shadow:0 0 0 0 rgba(228,76,0,0.5)} 50%{box-shadow:0 0 0 8px rgba(228,76,0,0)} }
+  .vwave { width:3px; background:rgba(255,255,255,0.5); border-radius:2px; animation:wave 1s ease-in-out infinite; }
+  .vwave:nth-child(1){height:6px;animation-delay:0s}
+  .vwave:nth-child(2){height:14px;animation-delay:0.1s}
+  .vwave:nth-child(3){height:20px;animation-delay:0.2s}
+  .vwave:nth-child(4){height:14px;animation-delay:0.3s}
+  .vwave:nth-child(5){height:6px;animation-delay:0.4s}
+  @keyframes wave { 0%,100%{transform:scaleY(0.4);opacity:0.4} 50%{transform:scaleY(1);opacity:1} }
   .page { display: none; }
   .page.active { display: block; }
   .toast { position: fixed; bottom: 24px; right: 24px; background: var(--navy-dark); color: white; padding: 12px 18px; border-radius: var(--radius-lg); font-size: 13px; font-weight: 500; box-shadow: var(--shadow-lg); z-index: 999; transform: translateY(80px); opacity: 0; transition: all 0.3s ease; display: flex; align-items: center; gap: 8px; border-left: 3px solid var(--orange); }
@@ -236,11 +247,21 @@
       <h3>Analyse intelligente des stocks</h3>
       <div class="ai-response" id="ai-response">Posez une question sur vos stocks ou demandez une analyse d'approvisionnement...</div>
       <div class="ai-input-wrap">
-        <input class="ai-input" id="ai-q" placeholder="Ex : Quels produits sont en rupture ? Analyse mon approvisionnement..." onkeydown="if(event.key==='Enter')askAI()">
+        <input class="ai-input" id="ai-q" placeholder="Ex : Quels produits sont en rupture ? Parlez ou tapez..." onkeydown="if(event.key==='Enter')askAI()">
+        <button class="btn-mic" id="btn-mic" onclick="toggleVoice()" title="Interaction vocale">
+          <svg id="mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0014 0"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>
+          <span id="mic-label">Vocal</span>
+        </button>
         <button class="btn btn-orange" onclick="askAI()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
           Analyser
         </button>
+      </div>
+      <div id="voice-bar" style="display:none;margin-top:12px;align-items:center;gap:10px">
+        <div id="voice-waves" style="display:flex;align-items:center;gap:3px;height:22px">
+          <div class="vwave"></div><div class="vwave"></div><div class="vwave"></div><div class="vwave"></div><div class="vwave"></div>
+        </div>
+        <span id="voice-status-text" style="font-size:12px;color:rgba(255,255,255,0.55)">En ecoute...</span>
       </div>
     </div>
     <div class="section-header">
@@ -839,9 +860,93 @@ Réponds en français de manière concise et professionnelle avec des recommanda
   try {
     const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,system:ctx,messages:[{role:'user',content:q}]})});
     const data=await res.json();
-    el.textContent=data.content?.[0]?.text||'Aucune réponse.';
+    const answer = data.content?.[0]?.text||'Aucune réponse.';
+    el.textContent = answer;
+    speakResponse(answer);
   } catch(e) { el.textContent='Erreur de connexion. Vérifiez votre réseau.'; }
   document.getElementById('ai-q').value='';
+}
+
+// ————— VOICE —————
+let recognition = null;
+let isListening = false;
+
+function toggleVoice() {
+  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+    showToast('Reconnaissance vocale non supportee par ce navigateur (Chrome recommande)');
+    return;
+  }
+  if (isListening) {
+    stopVoice();
+  } else {
+    startVoice();
+  }
+}
+
+function startVoice() {
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  recognition = new SpeechRec();
+  recognition.lang = 'fr-FR';
+  recognition.continuous = false;
+  recognition.interimResults = true;
+
+  recognition.onstart = function() {
+    isListening = true;
+    const btn = document.getElementById('btn-mic');
+    const bar = document.getElementById('voice-bar');
+    btn.classList.add('listening');
+    document.getElementById('mic-label').textContent = 'Stop';
+    bar.style.display = 'flex';
+    document.getElementById('voice-status-text').textContent = 'En ecoute... parlez maintenant';
+  };
+
+  recognition.onresult = function(e) {
+    let transcript = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      transcript += e.results[i][0].transcript;
+    }
+    document.getElementById('ai-q').value = transcript;
+    if (e.results[e.results.length - 1].isFinal) {
+      document.getElementById('voice-status-text').textContent = '"' + transcript + '"';
+    }
+  };
+
+  recognition.onerror = function(e) {
+    stopVoice();
+    if (e.error === 'not-allowed') showToast('Microphone non autorise — verifiez les permissions du navigateur');
+    else showToast('Erreur micro : ' + e.error);
+  };
+
+  recognition.onend = function() {
+    stopVoice();
+    const q = document.getElementById('ai-q').value.trim();
+    if (q) askAI();
+  };
+
+  recognition.start();
+}
+
+function stopVoice() {
+  isListening = false;
+  const btn = document.getElementById('btn-mic');
+  const bar = document.getElementById('voice-bar');
+  if (btn) { btn.classList.remove('listening'); document.getElementById('mic-label').textContent = 'Vocal'; }
+  if (bar) bar.style.display = 'none';
+  if (recognition) { try { recognition.stop(); } catch(e){} recognition = null; }
+}
+
+// TTS — lecture de la reponse IA
+function speakResponse(text) {
+  if (!('speechSynthesis' in window)) return;
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = 'fr-FR';
+  utter.rate = 1.05;
+  utter.pitch = 1;
+  const voices = window.speechSynthesis.getVoices();
+  const frVoice = voices.find(v => v.lang.startsWith('fr'));
+  if (frVoice) utter.voice = frVoice;
+  window.speechSynthesis.speak(utter);
 }
 
 function showToast(msg) {
