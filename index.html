@@ -890,8 +890,11 @@ function startVoice() {
   recognition.continuous = false;
   recognition.interimResults = true;
 
+  let finalTranscript = '';
+
   recognition.onstart = function() {
     isListening = true;
+    finalTranscript = '';
     const btn = document.getElementById('btn-mic');
     const bar = document.getElementById('voice-bar');
     btn.classList.add('listening');
@@ -901,14 +904,18 @@ function startVoice() {
   };
 
   recognition.onresult = function(e) {
-    let transcript = '';
+    let interim = '';
     for (let i = e.resultIndex; i < e.results.length; i++) {
-      transcript += e.results[i][0].transcript;
+      if (e.results[i].isFinal) {
+        finalTranscript += e.results[i][0].transcript;
+      } else {
+        interim += e.results[i][0].transcript;
+      }
     }
-    document.getElementById('ai-q').value = transcript;
-    if (e.results[e.results.length - 1].isFinal) {
-      document.getElementById('voice-status-text').textContent = '"' + transcript + '"';
-    }
+    // Affiche le texte en cours (interim) ou le texte final
+    const displayed = finalTranscript + interim;
+    document.getElementById('ai-q').value = displayed;
+    document.getElementById('voice-status-text').textContent = displayed ? '"' + displayed + '"' : 'En ecoute...';
   };
 
   recognition.onerror = function(e) {
@@ -919,8 +926,13 @@ function startVoice() {
 
   recognition.onend = function() {
     stopVoice();
-    const q = document.getElementById('ai-q').value.trim();
-    if (q) askAI();
+    // Utilise finalTranscript en priorite, sinon ce qui est dans le champ
+    const q = (finalTranscript || document.getElementById('ai-q').value).trim();
+    if (q) {
+      document.getElementById('ai-q').value = q;
+      // Petit delai pour que le DOM soit a jour avant d'appeler l'IA
+      setTimeout(() => askAI(), 100);
+    }
   };
 
   recognition.start();
